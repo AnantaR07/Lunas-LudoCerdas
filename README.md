@@ -1,16 +1,21 @@
-# ludo_cerdas
+# 🎲 Lunas – Ludo Sistem Pernapasan
 
-A new Flutter project.
+**Lunas** is an educational board game built with Flutter, designed to teach the human respiratory system through engaging gameplay inspired by the classic Ludo game.
 
-## Getting Started
+## 🚀 Features
 
-This project is a starting point for a Flutter application.
+- 🫁 Educational gameplay that introduces concepts of the respiratory system  
+- 🎯 Turn-based mechanics with intuitive UI  
+- 🎨 Custom-designed board and character pieces  
+- 📱 Cross-platform support (Android/iOS)  
+- 🧠 Designed to support learning through fun interaction
 
-A few resources to get you started if this is your first Flutter project:
+## 🛠️ Tech Stack
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- **Flutter & Dart** – Core app development  
+- **Custom Game Logic** – Built from scratch in Dart  
+- **Animations** – Smooth pawn movement and interaction feedback  
+- **Audio Feedback** – Sound effects for enhanced gameplay (if applicable)  
+- **GitHub** – Version control & project management
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
