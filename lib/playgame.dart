@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:async';
+import 'dart:ui'; // untuk BackdropFilter
 
 class GamePage extends StatefulWidget {
   const GamePage({super.key});
@@ -194,7 +195,122 @@ class _GamePageState extends State<GamePage> {
   int currentPlayerTurn = 0;
   final Map<Offset, int> positionOccupants = {};
   bool hasRolledDice = false;
-  bool justTookOutWithSix = false;
+  bool isGameOver = false;
+  String? winnerName;
+
+  void _showResultDialogWinner(String message, {String? winner, int? points}) {
+    final playerColor = winner != null
+        ? _playerColorByName(winner)
+        : Colors.blue;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: playerColor.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: playerColor.withOpacity(0.6),
+                    blurRadius: 20,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    winner != null ? Icons.emoji_events : Icons.info_outline,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    winner != null ? "Pemenang: $winner" : "Perhatian!",
+                    style: GoogleFonts.poppins(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (points != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      "Jumlah Poin: $points",
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        color: Colors.white70,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Text(
+                    message,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      color: Colors.white70,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 30),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: playerColor,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 8,
+                      shadowColor: playerColor.withOpacity(0.5),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      "Tutup",
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper untuk dapatkan warna dari nama pemain
+  Color _playerColorByName(String name) {
+    switch (name.toLowerCase()) {
+      case 'merah':
+        return Colors.red;
+      case 'hijau':
+        return Colors.green;
+      case 'kuning':
+        return Colors.amber[800]!;
+      case 'biru':
+        return Colors.blue;
+      default:
+        return Colors.blueGrey;
+    }
+  }
 
   final List<Offset> ludoPath = [
     Offset(6, 0),
@@ -251,6 +367,13 @@ class _GamePageState extends State<GamePage> {
     Offset(7, 0),
   ];
 
+  bool get canMovePawn {
+    return pawnPositions[currentPlayerTurn]!.any(
+          (pos) => !_isInBase(currentPlayerTurn, pos),
+        ) ||
+        currentDiceRoll == 6;
+  }
+
   bool _isInBase(int player, Offset position) {
     return basePawns[player]!.any(
       (base) =>
@@ -290,6 +413,10 @@ class _GamePageState extends State<GamePage> {
 
       3: List.generate(4, (_) => 0),
     };
+
+    // Inisialisasi playerSteps dengan 0 untuk setiap pemain
+
+    playerSteps = {0: 0, 1: 0, 2: 0, 3: 0};
   }
 
   List<Offset> _getPlayerPath(int player) {
@@ -833,23 +960,19 @@ class _GamePageState extends State<GamePage> {
     }
   }
 
-  void showWinnerDialog(String winner, int points) {
-    showDialog(
+  Future<void> showWinnerDialog(String winner, int points) async {
+    await showDialog(
       context: context,
-
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: Text("Pemenang: $winner"),
-
         content: Text("Jumlah Poin: $points"),
-
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-
-              // Reset game or navigate to home
+              // Bisa reset game atau kembali ke menu
             },
-
             child: const Text("OK"),
           ),
         ],
@@ -1164,11 +1287,21 @@ class _GamePageState extends State<GamePage> {
     );
   }
 
+  // Tambahkan print debug di movePawnAlongPath untuk melihat apakah move dipanggil dan posisi berubah
   Future<void> movePawnAlongPath(int player, int pawnIndex, int steps) async {
+    if (steps <= 0) {
+      print("Steps <= 0, skipping move");
+
+      return;
+    }
+
+    print("Starting move for player $player, pawn $pawnIndex, steps $steps");
     final path = _getPlayerPath(player);
     int currentIndex = pawnPathIndex[player]![pawnIndex];
+    print(
+      "Current index: $currentIndex, current pos: ${pawnPositions[player]![pawnIndex]}",
+    );
 
-    // Define the finish position for each player
     final List<Offset> finishPositions = [
       Offset(6, 6), // Merah
       Offset(6, 8), // Hijau
@@ -1176,37 +1309,38 @@ class _GamePageState extends State<GamePage> {
       Offset(8, 6), // Biru
     ];
 
-    // Calculate how many steps are needed to reach the finish
     int stepsToFinish = path.length - currentIndex - 1;
 
-    // If the pawn is about to exceed the finish line
     if (currentIndex + steps > path.length - 1) {
-      // Move to the finish position
+      print("Over finish, stepsToFinish: $stepsToFinish");
       for (int i = 0; i < stepsToFinish; i++) {
         currentIndex++;
         pawnPositions[player]![pawnIndex] = path[currentIndex];
+        print("Moving to index $currentIndex, pos ${path[currentIndex]}");
         setState(() {});
         await Future.delayed(const Duration(milliseconds: 300));
         await AudioPlayer().play(AssetSource('sounds/move.mp3'));
       }
 
-      // Calculate remaining steps to move backward
       int remainingSteps = (currentIndex + steps) - (path.length - 1);
+      print("Remaining steps: $remainingSteps");
       for (int i = 0; i < remainingSteps; i++) {
         if (currentIndex > 0) {
           currentIndex--;
           pawnPositions[player]![pawnIndex] = path[currentIndex];
+          print("Backing to index $currentIndex, pos ${path[currentIndex]}");
           setState(() {});
           await Future.delayed(const Duration(milliseconds: 300));
           await AudioPlayer().play(AssetSource('sounds/move.mp3'));
         }
       }
     } else {
-      // Normal movement
+      print("Normal move");
       for (int i = 0; i < steps; i++) {
         if (currentIndex + 1 < path.length) {
           currentIndex++;
           pawnPositions[player]![pawnIndex] = path[currentIndex];
+          print("Moving to index $currentIndex, pos ${path[currentIndex]}");
           setState(() {});
           await Future.delayed(const Duration(milliseconds: 300));
           await AudioPlayer().play(AssetSource('sounds/move.mp3'));
@@ -1215,6 +1349,15 @@ class _GamePageState extends State<GamePage> {
     }
 
     pawnPathIndex[player]![pawnIndex] = currentIndex;
+    print(
+      "Final index: $currentIndex, final pos: ${pawnPositions[player]![pawnIndex]}",
+    );
+
+    // Cek apakah pion sudah sampai finish
+    if (pawnPositions[player]![pawnIndex] == finishPositions[player]) {
+      print("Reached finish for player $player");
+      await onPieceFinished(_getColorName(player));
+    }
   }
 
   Future<void> movePawnAnimated(int player, int pawnIndex, int steps) async {
@@ -1274,7 +1417,26 @@ class _GamePageState extends State<GamePage> {
   }
 
   void _handlePawnTap(int player, int pawnIndex) async {
+    print(
+      "Handling tap for player $player, pawn $pawnIndex, currentPlayerTurn $currentPlayerTurn, dice $currentDiceRoll, isInBase ${_isInBase(player, pawnPositions[player]![pawnIndex])}",
+    );
+
+    if (isGameOver) {
+      _showResultDialogWinner(
+        "Permainan sudah selesai.",
+        winner: winnerName,
+        points: playerPoints[winnerName] ?? 0,
+      );
+      return;
+    }
     if (currentPlayerTurn != player) return;
+
+    // Check if the player has finished all pawns
+
+    if (playerPiecesFinished[player] == 4) {
+      _showResultDialog("Anda sudah menyelesaikan permainan!");
+      return; // Prevent further interaction with this player
+    }
 
     if (currentDiceRoll == 0) {
       _showResultDialog("Silakan lempar dadu terlebih dahulu!");
@@ -1300,8 +1462,31 @@ class _GamePageState extends State<GamePage> {
 
     final bool isInBase = _isInBase(player, currentPos);
 
+    // Allow the player to move if they rolled a 6
     if (currentDiceRoll == 6 && isInBase) {
       await _movePawnFromBase(player, pawnIndex);
+      return;
+    }
+
+    // Reset status dadu agar tombol berubah ke "Roll Dadu"
+
+    // setState(() {
+    //   hasRolledDice = false;
+
+    //   currentDiceRoll = 0;
+
+    //   // Giliran tetap sama, jadi tidak ganti currentPlayerTurn
+    // });
+
+    // Check if the player has already moved two pawns out of the base
+    int pawnsOutOfBase = pawnPositions[player]!
+        .where((pos) => !_isInBase(player, pos))
+        .length;
+
+    if (isInBase && pawnsOutOfBase >= 2) {
+      _showResultDialog(
+        "Anda sudah mengeluarkan 2 pion, perlu angka 6 untuk mengeluarkan pion ketiga.",
+      );
       return;
     }
 
@@ -1323,42 +1508,59 @@ class _GamePageState extends State<GamePage> {
         // Move the pawn normally
         await movePawnAlongPath(player, pawnIndex, currentDiceRoll);
         setState(() {
-          currentPlayerTurn = (currentPlayerTurn + 1) % 4;
           currentDiceRoll = 0;
           hasRolledDice = false;
+          currentPlayerTurn = (currentPlayerTurn + 1) % 4;
         });
       }
     } else {
       _showResultDialog("Pion masih di base, perlu angka 6 untuk keluar");
     }
-  }
 
-  void checkForWinner() {
-    for (var player in playerPiecesFinished.keys) {
-      if (playerPiecesFinished[player] == 4) {
-        showWinnerDialog(player, playerPoints[player]!);
-
-        break;
-      }
+    // Check if the player has any pawns that can be moved
+    if (!hasPawnsOnTrack) {
+      // Skip to the next player
+      setState(() {
+        currentPlayerTurn = (currentPlayerTurn + 1) % 4;
+        currentDiceRoll = 0; // Reset dice
+        hasRolledDice = false; // Allow next player to roll
+      });
     }
   }
 
-  void onPieceFinished(String player) {
+  Future<void> onPieceFinished(String player) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Pion finish untuk pemain $player"),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
     setState(() {
       playerPiecesFinished[player] = playerPiecesFinished[player]! + 1;
-
-      // Tambahkan poin sesuai dengan logika permainan
-
-      playerPoints[player] =
-          playerPoints[player]! + 10; // Contoh penambahan poin
+      playerPoints[player] = playerPoints[player]! + 10;
     });
 
-    checkForWinner();
+    if (playerPiecesFinished[player] == 4) {
+      setState(() {
+        isGameOver = true;
+        winnerName = player;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Pemain $player menang!"),
+          duration: Duration(seconds: 3),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      await Future.delayed(Duration(milliseconds: 300));
+      await showWinnerDialog(player, playerPoints[player]!);
+    }
   }
 
   List<Widget> _buildPawns(int row, int col) {
-    List<Widget> pawns = [];
-
     Map<int, List<int>> playersWithPawns = {};
 
     // Collect all pawns at this position
@@ -1381,7 +1583,56 @@ class _GamePageState extends State<GamePage> {
       return [];
     }
 
-    // Create Stack to overlay pawns
+    // Hitung total pion di posisi ini
+    int totalPawns = playersWithPawns.values.fold(
+      0,
+      (sum, list) => sum + list.length,
+    );
+
+    // Jika lebih dari 1 pion, tampilkan pion warna ungu
+    if (totalPawns > 1) {
+      return [
+        GestureDetector(
+          onTap: () {
+            _showPawnSelectionDialog(row, col);
+          },
+          child: Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            child: Transform.translate(
+              offset: Offset(0, -6), // Geser 6 pixel ke atas
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.7),
+                      Colors.purple.withOpacity(0.9),
+                      Colors.purple,
+                    ],
+                    center: Alignment.topLeft,
+                    radius: 0.9,
+                  ),
+                  border: Border.all(color: Colors.white, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 3,
+                      offset: Offset(1, 1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // Jika hanya 1 pion, tampilkan pion dengan warna pemain
     return [
       GestureDetector(
         onTap: () {
@@ -1393,17 +1644,13 @@ class _GamePageState extends State<GamePage> {
               _showPawnSelectionDialog(row, col);
             } else {
               final player = playersWithPawns.keys.first;
-
               final pawnIndex = playersWithPawns[player]!.first;
-
               _handlePawnTap(player, pawnIndex);
             }
           } else {
-            // If there are multiple pawns, show selection dialog
             if (playersWithPawns.length > 1) {
               _showPawnSelectionDialog(row, col);
             } else {
-              // If only one pawn, move it directly
               final player = playersWithPawns.keys.first;
               final pawnIndex = playersWithPawns[player]!.first;
               _handlePawnTap(player, pawnIndex);
@@ -1418,32 +1665,40 @@ class _GamePageState extends State<GamePage> {
             children: playersWithPawns.entries.expand((playerEntry) {
               int player = playerEntry.key;
               return playerEntry.value.map((pawnIndex) {
-                return Positioned(
-                  left: 0,
-                  top: 0,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          Colors.white.withOpacity(0.7),
-                          _playerColor(player).withOpacity(0.9),
-                          _playerColor(player),
-                        ],
-                        center: Alignment.topLeft,
-                        radius: 0.9,
-                      ),
-                      border: Border.all(color: Colors.white, width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 3,
-                          offset: Offset(1, 1),
+                return Align(
+                  alignment: Alignment.center,
+                  child: TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeInOut,
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    builder: (context, value, child) {
+                      final double scale = 0.9 + (value * 0.05); // kecil, halus
+                      final double glow = value * 2; // glow kecil
+
+                      return Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.4),
+                                blurRadius: glow, // glow kecil & lembut
+                                spreadRadius: glow * 0.3,
+                              ),
+                            ],
+                          ),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Image.asset(
+                              _getPawnImage(player),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 );
               }).toList();
@@ -1452,6 +1707,31 @@ class _GamePageState extends State<GamePage> {
         ),
       ),
     ];
+  }
+
+  // Tambahkan fungsi helper untuk mendapatkan path gambar pion
+
+  String _getPawnImage(int player) {
+    switch (player) {
+      case 0: // Merah
+
+        return 'assets/images/pion/Hidung.png';
+
+      case 1: // Hijau
+
+        return 'assets/images/pion/Trakea.png';
+
+      case 2: // Kuning
+
+        return 'assets/images/pion/Faring.png';
+
+      case 3: // Biru
+
+        return 'assets/images/pion/Paru-paru.png';
+
+      default:
+        return 'assets/images/pion/Hidung.png'; // Default
+    }
   }
 
   Future<void> _showPawnSelectionDialog(int row, int col) async {
@@ -1507,7 +1787,10 @@ class _GamePageState extends State<GamePage> {
       height: 30,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: _playerColor(player),
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: ClipOval(
+        child: Image.asset(_getPawnImage(player), fit: BoxFit.cover),
       ),
     );
   }
@@ -1547,10 +1830,14 @@ class _GamePageState extends State<GamePage> {
     setState(() {});
     await AudioPlayer().play(AssetSource('sounds/move.mp3'));
 
-    // Setelah mengeluarkan pion, langsung ganti giliran pemain
+    // Ganti giliran dan reset status dadu
+
     setState(() {
-      currentPlayerTurn =
-          (currentPlayerTurn + 1) % 4; // Ganti ke pemain berikutnya
+      currentPlayerTurn = (currentPlayerTurn + 1) % 4;
+
+      hasRolledDice = false;
+
+      currentDiceRoll = 0;
     });
   }
 
@@ -1869,17 +2156,17 @@ class _GamePageState extends State<GamePage> {
                         ),
                       ),
                       onPressed: () async {
-                        // Check if the player has already rolled the dice
-                        if (justTookOutWithSix) {
-                          setState(() {
-                            justTookOutWithSix = false;
-                            hasRolledDice = false;
-                          });
-                          // Intentional fall through to roll dice
+                        if (isGameOver) {
+                          _showResultDialogWinner(
+                            "Permainan sudah selesai.",
+                            winner: winnerName,
+                            points: playerPoints[winnerName] ?? 0,
+                          );
+                          return;
                         }
 
-                        // Check if needs to move pawns first
-                        if (hasRolledDice && hasPawnsOnTrack) {
+                        if ((hasRolledDice && hasPawnsOnTrack) ||
+                            currentDiceRoll == 6) {
                           _showResultDialog(
                             "Silakan gerakkan pion Anda terlebih dahulu",
                           );
@@ -1889,8 +2176,10 @@ class _GamePageState extends State<GamePage> {
                         final audioPlayer = AudioPlayer();
                         await audioPlayer.play(AssetSource('sounds/roll.mp3'));
 
+                        // int dice = 6;
                         int dice =
                             1 + (DateTime.now().millisecondsSinceEpoch % 6);
+
                         setState(() {
                           currentDiceRoll = dice;
                           hasRolledDice =
@@ -1917,95 +2206,330 @@ class _GamePageState extends State<GamePage> {
                         int inBase = pawnPositions[currentPlayerTurn]!
                             .where((pos) => _isInBase(currentPlayerTurn, pos))
                             .length;
-                        bool specialCase = finished == 1 && inBase == 3;
+                        bool specialCaseOne =
+                            finished == 1 && inBase == 3 && dice != 6;
 
+                        bool specialCaseTwo =
+                            finished == 2 && inBase == 2 && dice != 6;
+
+                        bool specialCaseThree =
+                            finished == 3 && inBase == 1 && dice != 6;
+                        bool specialCaseFour = finished == 4 && inBase == 0;
                         // Hanya tampilkan notifikasi jika dadu menunjukkan angka 6
-                        if (dice == 6) {
+                        if (specialCaseFour) {
+                          // Game over
+
+                          setState(() {
+                            isGameOver = true;
+
+                            winnerName = _getColorName(currentPlayerTurn);
+                          });
+
+                          await Future.delayed(Duration(milliseconds: 500));
+
+                          final AudioPlayer audioPlayer = AudioPlayer();
+
+                          await audioPlayer.play(AssetSource('sounds/win.mp3'));
+
+                          // Di dalam bagian specialCaseFour, ubah dialog sebagai berikut:
+
+                          await showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (BuildContext context) {
+                              return Dialog(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                elevation: 16,
+                                backgroundColor: Colors.white,
+                                child: Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.orange.shade200,
+                                        Colors.deepOrange.shade400,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(24),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.deepOrange.withOpacity(
+                                          0.5,
+                                        ),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 6),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.emoji_events_rounded,
+                                        size: 72,
+                                        color: Colors.yellow.shade700,
+                                        shadows: [
+                                          Shadow(
+                                            blurRadius: 10,
+                                            color: Colors.black26,
+                                            offset: Offset(0, 3),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Text(
+                                        'Permainan Berakhir!',
+                                        textAlign: TextAlign
+                                            .center, // Tambahkan ini untuk memusatkan teks
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                          shadows: [
+                                            Shadow(
+                                              blurRadius: 6,
+                                              color: Colors.black38,
+                                              offset: Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Pemain $winnerName telah memenangkan permainan!',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 16,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Poin Akhir:',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      ...playerPoints.entries
+                                          .map(
+                                            (entry) => Container(
+                                              margin:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 4,
+                                                  ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 8,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: _playerColorByName(
+                                                  entry.key,
+                                                ), // Background warna pemain
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withOpacity(0.2),
+                                                    blurRadius: 4,
+                                                    offset: Offset(0, 2),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: Text(
+                                                '${entry.key}: ${entry.value}',
+                                                textAlign: TextAlign.center,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 16,
+                                                  color: Colors
+                                                      .white, // Warna teks putih untuk kontras
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                      const SizedBox(height: 24),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.yellow.shade700,
+                                          foregroundColor:
+                                              Colors.deepOrange.shade900,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 36,
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                          elevation: 8,
+                                          shadowColor: Colors.black45,
+                                        ),
+                                        onPressed: () {
+                                          Navigator.of(
+                                            context,
+                                          ).popUntil((route) => route.isFirst);
+                                        },
+                                        child: Text(
+                                          'OK',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                          return;
+                        } else if (specialCaseOne ||
+                            specialCaseTwo ||
+                            specialCaseThree) {
+                          // Gabungkan specialCaseOne, Two, Three: Langsung ganti pemain tanpa notifikasi
+
+                          await Future.delayed(Duration(milliseconds: 500));
+
+                          setState(() {
+                            currentPlayerTurn = (currentPlayerTurn + 1) % 4;
+
+                            currentDiceRoll = 0; // Reset dice
+
+                            hasRolledDice = false; // Allow next player to roll
+                          });
+                        } else if (dice == 6) {
+                          // Baru cek dice == 6 jika specialCase tidak terpenuhi
+
                           final playerColor = _playerColor(currentPlayerTurn);
 
                           await showDialog(
                             context: context,
+
                             builder: (context) => Dialog(
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
                               ),
+
                               elevation: 8,
+
                               child: Container(
                                 padding: EdgeInsets.all(20),
+
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
+
                                     end: Alignment.bottomRight,
+
                                     colors: [
                                       playerColor.withOpacity(0.1),
+
                                       playerColor.withOpacity(0.3),
                                     ],
                                   ),
+
                                   borderRadius: BorderRadius.circular(20),
                                 ),
+
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
+
                                   children: [
                                     Icon(
                                       Icons.star_rate_rounded,
+
                                       size: 40,
+
                                       color: playerColor,
                                     ),
+
                                     SizedBox(height: 16),
+
                                     Text(
                                       "Pemain ${currentPlayerTurn + 1}",
+
                                       style: GoogleFonts.poppins(
                                         fontSize: 20,
+
                                         fontWeight: FontWeight.bold,
+
                                         color: playerColor,
                                       ),
                                     ),
+
                                     SizedBox(height: 8),
+
                                     Text(
                                       "Mendapat angka $dice!",
+
                                       style: GoogleFonts.poppins(
                                         fontSize: 18,
+
                                         color: Colors.black87,
                                       ),
                                     ),
+
                                     SizedBox(height: 16),
+
                                     Text(
                                       "Silakan pilih pion untuk digerakkan",
+
                                       textAlign: TextAlign.center,
+
                                       style: GoogleFonts.poppins(
                                         fontSize: 16,
+
                                         color: Colors.black54,
                                       ),
                                     ),
+
                                     SizedBox(height: 24),
+
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: playerColor,
+
                                         foregroundColor: Colors.white,
+
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
                                             12,
                                           ),
                                         ),
+
                                         padding: EdgeInsets.symmetric(
                                           horizontal: 24,
+
                                           vertical: 12,
                                         ),
+
                                         elevation: 3,
                                       ),
+
                                       onPressed: () {
                                         Navigator.of(context).pop();
-                                        // After moving a pawn, allow the player to roll again
-                                        setState(() {
-                                          justTookOutWithSix = true;
-                                          hasRolledDice =
-                                              false; // Allow next player to roll
-                                        });
                                       },
+
                                       child: Text(
                                         "Mengerti",
+
                                         style: GoogleFonts.poppins(
                                           fontSize: 16,
+
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -2015,15 +2539,6 @@ class _GamePageState extends State<GamePage> {
                               ),
                             ),
                           );
-                        } else if (specialCase) {
-                          // Langsung ganti pemain tanpa notifikasi
-                          await Future.delayed(Duration(milliseconds: 500));
-                          setState(() {
-                            currentPlayerTurn = (currentPlayerTurn + 1) % 4;
-                            currentDiceRoll =
-                                0; // Reset dice after special case
-                            hasRolledDice = false; // Allow next player to roll
-                          });
                         } else if (_isAnyPawnOnTrack(currentPlayerTurn)) {
                           // Allow the player to choose a pawn to move
                           // After moving the pawn, reset the dice and change player
@@ -2047,21 +2562,13 @@ class _GamePageState extends State<GamePage> {
                       child: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 300),
                         child: Text(
-                          justTookOutWithSix
-                              ? "Roll Dadu Lagi"
-                              : hasRolledDice
-                              ? (hasPawnsOnTrack
-                                    ? "Gerakkan Pion"
-                                    : "Lempar Lagi")
+                          hasRolledDice
+                              ? (canMovePawn ? "Gerakkan Pion" : "Lempar Lagi")
                               : "Roll Dadu",
-
-                          key: ValueKey('${hasRolledDice}_${hasPawnsOnTrack}'),
-
+                          key: ValueKey('${hasRolledDice}_${canMovePawn}'),
                           style: GoogleFonts.poppins(
                             fontSize: 18,
-
                             fontWeight: FontWeight.bold,
-
                             color: Colors.white,
                           ),
                         ),
@@ -2114,30 +2621,36 @@ class _GamePageState extends State<GamePage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              width: 20, // Reduced size of the pawn
+                              width: 20,
+
                               height: 20,
+
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: RadialGradient(
-                                  colors: [
-                                    Colors.white.withOpacity(0.7),
-                                    _playerColor(index).withOpacity(0.9),
-                                    _playerColor(index),
-                                  ],
-                                  center: Alignment.topLeft,
-                                  radius: 0.9,
-                                ),
+
                                 border: Border.all(
                                   color: Colors.white,
+
                                   width: 1.5,
                                 ),
+
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withOpacity(0.25),
+
                                     blurRadius: 4,
-                                    offset: Offset(1, 1), // Reduced offset
+
+                                    offset: Offset(1, 1),
                                   ),
                                 ],
+                              ),
+
+                              child: ClipOval(
+                                child: Image.asset(
+                                  _getPawnImage(index),
+
+                                  fit: BoxFit.cover,
+                                ),
                               ),
                             ),
                             SizedBox(height: 4), // Reduced space
@@ -2222,12 +2735,109 @@ class _GamePageState extends State<GamePage> {
                                     const SliverGridDelegateWithFixedCrossAxisCount(
                                       crossAxisCount: 15,
                                     ),
+
+                                // Di dalam itemBuilder dari GridView.builder, ubah sebagai berikut:
                                 itemBuilder: (context, index) {
                                   final row = index ~/ gridSize;
                                   final col = index % gridSize;
                                   final cellColor = _getCellColor(row, col);
                                   final pawns = _buildPawns(row, col);
                                   final isTrack = _isTrackCell(row, col);
+
+                                  // Cek apakah ada ikon untuk ditampilkan
+                                  Widget? iconWidget;
+                                  final screenWidth = MediaQuery.of(
+                                    context,
+                                  ).size.width;
+                                  bool isSmallScreen =
+                                      screenWidth < 600; // HP threshold
+
+                                  // icon kecil, soft glow, tetap center, offset tipis
+                                  Widget makeCuteIcon(
+                                    IconData icon,
+                                    Color color, {
+                                    Offset offset = Offset.zero,
+                                  }) {
+                                    final appliedOffset = isSmallScreen
+                                        ? Offset.zero
+                                        : offset;
+
+                                    double iconSize = isSmallScreen
+                                        ? 10
+                                        : 13; // lebih kecil di HP
+                                    double paddingSize = isSmallScreen
+                                        ? 1.2
+                                        : 2; // padding juga kecil di HP
+                                    double blur = isSmallScreen
+                                        ? 1
+                                        : 2; // shadow kecil di HP
+
+                                    return Align(
+                                      alignment: Alignment.center,
+                                      child: Transform.translate(
+                                        offset: appliedOffset,
+                                        child: Container(
+                                          padding: EdgeInsets.all(paddingSize),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: color.withOpacity(0.18),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: isSmallScreen
+                                                    ? Colors
+                                                          .transparent // HP: tanpa shadow
+                                                    : color.withOpacity(
+                                                        0.30,
+                                                      ), // Desktop: soft glow
+                                                blurRadius: blur,
+                                                spreadRadius: 0.4,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Icon(
+                                            icon,
+                                            color: color,
+                                            size: iconSize,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  // offset kecil biar "hidup", tapi tetap center
+                                  if (materialTiles.containsKey(
+                                    Offset(row.toDouble(), col.toDouble()),
+                                  )) {
+                                    iconWidget = makeCuteIcon(
+                                      Icons.backpack,
+                                      Colors.orange,
+                                      offset: const Offset(0, -1), // dikit atas
+                                    );
+                                  } else if (luckyTiles.containsKey(
+                                    Offset(row.toDouble(), col.toDouble()),
+                                  )) {
+                                    iconWidget = makeCuteIcon(
+                                      Icons.star_rounded,
+                                      Colors.yellow,
+                                      offset: const Offset(1, 0), // dikit kanan
+                                    );
+                                  } else if (quizTiles.containsKey(
+                                    Offset(row.toDouble(), col.toDouble()),
+                                  )) {
+                                    iconWidget = makeCuteIcon(
+                                      Icons.question_mark,
+                                      Colors.blueAccent,
+                                      offset: const Offset(-1, 0), // dikit kiri
+                                    );
+                                  } else if (timeTiles.containsKey(
+                                    Offset(row.toDouble(), col.toDouble()),
+                                  )) {
+                                    iconWidget = makeCuteIcon(
+                                      Icons.hourglass_bottom,
+                                      Colors.green,
+                                      offset: const Offset(0, 1), // dikit bawah
+                                    );
+                                  }
 
                                   return Container(
                                     decoration: BoxDecoration(
@@ -2240,16 +2850,15 @@ class _GamePageState extends State<GamePage> {
                                             0.3, // bisa sesuaikan jika ingin lebih tebal
                                       ),
                                     ),
-                                    child: pawns.isNotEmpty
-                                        ? Center(
-                                            child: Wrap(
-                                              alignment: WrapAlignment.center,
-                                              spacing: 2,
-                                              runSpacing: 2,
-                                              children: pawns,
-                                            ),
-                                          )
-                                        : const SizedBox.shrink(),
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        // Ikon untuk tile khusus (di bawah pawns)
+                                        if (iconWidget != null) iconWidget,
+                                        // Pawns (di atas ikon)
+                                        if (pawns.isNotEmpty) ...pawns,
+                                      ],
+                                    ),
                                   );
                                 },
                               ),

@@ -1,5 +1,5 @@
-name: ludo_cerdas
-description: "A new Flutter project."
+name: Lunas
+description: "Ludo Cerdas"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
@@ -38,6 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
   flutter_test:
     sdk: flutter
 
@@ -47,6 +48,12 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+
+  # Konfigurasi untuk flutter_launcher_icons (harus di root level)
+flutter_launcher_icons:
+  android: true
+  ios: true # Jika Anda juga ingin untuk iOS
+  image_path: "assets/icon/my_icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -89,6 +96,10 @@ flutter:
     - assets/images/card/KartuWaktu3.jpeg
     - assets/images/card/KartuWaktu4.jpeg
     - assets/images/card/KartuWaktu5.jpeg
+    - assets/images/pion/Hidung.png
+    - assets/images/pion/Trakea.png
+    - assets/images/pion/Faring.png
+    - assets/images/pion/Paru-paru.png
     - assets/sounds/move.mp3
     - assets/sounds/alert.mp3
     - assets/sounds/roll.mp3
